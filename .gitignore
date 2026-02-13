@@ -1,1 +1,22 @@
 PROJECT_1_SCD2_PLAN_FINAL.md
+
+# Environment secrets
+.env
+
+# Raw downloaded snapshots (too large for git)
+data/raw/*.csv
+
+# dbt build artifacts
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
