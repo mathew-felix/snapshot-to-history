@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: stg_businesses
+    description: >
+      Normalized and deduplicated business snapshot records.
+      One row per (license_nbr, load_date). Rows with missing license_nbr
+      are excluded. Includes attr_hash for SCD2 change detection.
+    columns:
+      - name: license_nbr
+        description: "Natural key — never normalized"
+        tests:
+          - not_null
+      - name: load_date
+        description: "Snapshot date this record belongs to"
+        tests:
+          - not_null
+      - name: attr_hash
+        description: "MD5 hash of tracked attributes for change detection"
+        tests:
+          - not_null
+      - name: business_name
+        description: "Normalized business name (trim/upper/collapse whitespace)"
+      - name: address_full
+        description: "Standardized concatenated address"
+      - name: license_status
+        description: "Normalized license status"
+      - name: license_category
+        description: "Normalized license category"

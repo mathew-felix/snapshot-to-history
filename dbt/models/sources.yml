@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: "Raw append-only snapshot data loaded by load_raw.py"
+    tables:
+      - name: businesses_snapshot
+        description: "Full daily snapshot of NYC business licenses, all columns as TEXT"
+        columns:
+          - name: license_nbr
+            description: "Natural key — business license number from source"
+          - name: load_date
+            description: "The date this snapshot was loaded (added by loader)"
+            tests:
+              - not_null
+          - name: ingested_at
+            description: "Timestamp when the row was inserted"
+            tests:
+              - not_null
