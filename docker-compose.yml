@@ -22,10 +22,13 @@ services:
       db:
         condition: service_healthy
     env_file: .env
+    environment:
+      # Override host to use Docker internal name, not localhost
+      POSTGRES_HOST: db
     volumes:
       - .:/app
     working_dir: /app
-    command: ["echo", "Runner ready"]
+    command: ["bash", "run.sh"]
 
 volumes:
   pg_data:
