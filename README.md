@@ -1,6 +1,18 @@
 # SCD Type 2 Business Registry Pipeline
 
-> NYC publishes only a daily "current state" snapshot of ~70K business licenses with no history, so naive loads destroy the past. This project ingests full snapshots into PostgreSQL and uses dbt to maintain a **Slowly Changing Dimension (Type 2)** with hash-based change detection that ignores cosmetic noise, fully idempotent loads, and automated tests guaranteeing exactly one current row per business and zero overlapping history ranges — turning a stateless feed into a queryable point-in-time history, runnable end-to-end with a single `make run`.
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
+![dbt](https://img.shields.io/badge/dbt-1.7-FF694B?logo=dbt&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-17%20passing-brightgreen)
+
+**Turns a stateless NYC business license feed into a queryable point-in-time history using SCD Type 2.**
+
+```
+70,000 rows  ·  idempotent loads  ·  hash-based change detection  ·  17 automated tests  ·  one-command setup
+```
+
+> NYC publishes only a daily "current state" snapshot with no history, so naive loads destroy the past. This pipeline ingests full snapshots into PostgreSQL and uses dbt to maintain a **Slowly Changing Dimension (Type 2)** — turning a stateless feed into a queryable point-in-time history, runnable end-to-end with a single `make run`.
 
 ---
 
