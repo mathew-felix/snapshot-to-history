@@ -8,11 +8,7 @@
 
 **Turns a stateless NYC business license feed into a queryable point-in-time history using SCD Type 2.**
 
-```
-70,000 rows  ·  idempotent loads  ·  hash-based change detection  ·  17 automated tests  ·  one-command setup
-```
-
-> NYC publishes only a daily "current state" snapshot with no history, so naive loads destroy the past. This pipeline ingests full snapshots into PostgreSQL and uses dbt to maintain a **Slowly Changing Dimension (Type 2)** — turning a stateless feed into a queryable point-in-time history, runnable end-to-end with a single `make run`.
+> NYC publishes only a daily "current state" snapshot of ~70K business licenses with no history — every overwrite destroys the past. This pipeline ingests full snapshots into PostgreSQL and uses dbt to maintain a versioned history of every business record, so questions like *"What was this business's address on March 1st?"* become answerable.
 
 ---
 
@@ -25,114 +21,79 @@ cp .env.example .env
 make run
 ```
 
-That's it. Postgres starts, schemas initialize, sample data loads, dbt runs, tests pass, and a summary prints.
+Postgres starts, schemas initialize, the sample dataset loads, dbt runs, tests pass, and a summary prints — no manual steps.
 
 ---
 
 ## The Problem
 
-NYC's [active business license dataset](https://data.cityofnewyork.us/Business/Legally-Operating-Businesses/w7w3-xahh) is a **full overwrite snapshot** — every load destroys the previous state. This means:
+NYC's [active business license dataset](https://data.cityofnewyork.us/Business/Legally-Operating-Businesses/w7w3-xahh) is a full overwrite snapshot. Every daily load destroys the previous state:
 
-- "What was this business's address on March 1st?" → **impossible to answer**
-- "How many businesses changed address last month?" → **no data**
-- Re-running the same load creates duplicate rows → **broken analytics**
+- *"What was this business's address on March 1st?"* → impossible to answer
+- *"How many businesses changed address last month?"* → no data exists
+- Re-running the same load silently creates duplicate rows
 
-SCD Type 2 solves this by maintaining a versioned history row for every state a business has been in, with `valid_from`/`valid_to` timestamps and an `is_current` flag.
+**SCD Type 2** solves this by keeping a version row for every state a record has been in, with `valid_from` / `valid_to` dates and a `is_current` flag.
 
 ---
 
-## Architecture
+## How It Works
 
 ```
-[NYC Open Data API]  →  extract.py  →  data/raw/snapshot_YYYY-MM-DD.csv
-                                              ↓
-                                       load_raw.py (idempotent COPY)
-                                              ↓
-                                  raw.businesses_snapshot  (all TEXT)
-                                              ↓
-                                   dbt: stg_businesses  (normalized + hashed)
-                                              ↓
-                                   dbt snapshot: marts.businesses_snapshot  (SCD2)
-                                              ↓
-                          Analytics: vw_address_changes, vw_status_history
-                                              ↓
-                                       src/summary.py  (console report)
+NYC Open Data API
+      ↓  extract.py — paginated pull, stable sort
+data/raw/snapshot_YYYY-MM-DD.csv
+      ↓  load_raw.py — idempotent COPY into Postgres
+raw.businesses_snapshot  (all columns stored as TEXT)
+      ↓  dbt staging — normalize, cast, deduplicate, hash
+staging.stg_businesses   (one clean row per license per day)
+      ↓  dbt snapshot — compare attr_hash, open/close versions
+marts.businesses_snapshot  (SCD2: valid_from, valid_to, is_current)
+      ↓
+Analytics views: address changes · status history · run quality metrics
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full deep-dive.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design rationale.
 
 ---
 
-## How SCD2 + Idempotency Are Guaranteed
+## Key Engineering Decisions
 
-**1. Normalize before hashing**
-All tracked attributes (name, address, status) are uppercased, trimmed, and whitespace-collapsed *before* computing the MD5 hash. This means `"Main St"` and `"MAIN  ST"` produce the same hash — no false-positive new versions from cosmetic differences.
+**Normalize before hashing**
+Tracked attributes are uppercased, trimmed, and whitespace-collapsed *before* computing the MD5 hash. `"Main St"` and `"MAIN  ST"` produce the same hash — preventing false-positive new versions from cosmetic source differences.
 
-**2. Hash-based change detection**
-dbt's `check` strategy compares `attr_hash` against the current dimension row. Only a real attribute change opens a new version.
+**Idempotent loads**
+`load_raw.py` deletes the existing rows for a `load_date` before re-inserting. Re-running the same snapshot always produces the same result — no duplicates, no phantom versions.
 
-**3. Idempotent raw loads**
-`load_raw.py` does `DELETE WHERE load_date = :d` before `COPY` — re-running the same snapshot always produces the same raw row count.
-
-**4. Proven by tests, not assumed**
-- `assert_one_current_per_key.sql` — fails if any `license_nbr` has >1 open version
-- `assert_no_overlapping_ranges.sql` — fails if any two versions for the same key overlap in time
+**Tests prove correctness**
+Two custom dbt tests enforce the SCD2 invariants on every run:
+- `assert_one_current_per_key` — at most one open version per business
+- `assert_no_overlapping_ranges` — no two versions overlap in time
 
 ---
 
-## Data Contract
-
-| Layer | Table | Key |
-|---|---|---|
-| Raw | `raw.businesses_snapshot` | `(license_nbr, load_date)` |
-| Staging | `staging.stg_businesses` | `(license_nbr, load_date)` |
-| Mart (SCD2) | `marts.businesses_snapshot` | `dbt_scd_id` (surrogate), `license_nbr` (natural) |
-
----
-
-## Tests & Data Quality
+## Tests
 
 ```bash
-# Python unit tests (mocked — no API calls)
-pytest tests/ -v
-
-# dbt schema + singular tests
-cd dbt && dbt test --profiles-dir .
+pytest tests/ -v          # 5 Python unit tests (mocked, no API calls)
+cd dbt && dbt test        # 12 dbt schema + singular tests
 ```
 
-| Test | What it enforces |
+---
+
+## Tech Stack
+
+| | |
 |---|---|
-| `test_single_page_stops` | Pagination halts on partial pages |
-| `test_csv_has_correct_columns` | Output CSV matches the data contract |
-| `test_api_error_raises` | HTTP errors propagate — never silent failures |
-| `test_first_load_inserts_rows` | Correct row count after first load |
-| `test_reload_same_date_is_idempotent` | Row count unchanged on re-run |
-| `assert_one_current_per_key` | ≤1 current version per business |
-| `assert_no_overlapping_ranges` | No overlapping validity windows |
-| Schema `not_null` / `unique` tests | Column-level data contract |
+| **Python 3.11** | Data extraction, idempotent loading, orchestration |
+| **PostgreSQL 16** | Append-only raw store, SCD2 dimension, analytics views |
+| **dbt Core 1.7** | Staging normalization, snapshot strategy, data quality tests |
+| **Docker Compose** | One-command reproducible environment |
 
 ---
 
-## Tech Stack & Why
+## What's Next
 
-| Tool | Why |
-|---|---|
-| **Python** | Best ergonomics for HTTP pagination + file I/O + psycopg2 COPY |
-| **PostgreSQL 16** | Free, ACID, supports COPY, window functions, and constraints |
-| **dbt Core 1.7** | Battle-tested SCD2 via `dbt snapshot`, declarative tests, lineage graph |
-| **Docker Compose** | One-command reproducible environment, no host pollution |
-
----
-
-## Resume Bullet
-
-> Built an idempotent SCD Type 2 pipeline (Python, PostgreSQL, dbt) over ~70K NYC business-license records, **measured by zero overlapping history ranges and zero duplicate versions on snapshot re-runs**, by implementing hash-based change detection with pre-hash normalization and dbt-enforced data-quality tests.
-
----
-
-## What I'd Do Next
-
-- **Airflow DAG** for daily scheduling with backfill support
-- **Detect deletions** — businesses that disappear from a snapshot get `valid_to` closed
-- **Fact tables** — join on `business_sk` + as-of date for point-in-time analytics
-- **More sources** — join NYC permits and inspections data to the same dimension
+- Schedule daily runs with an **Airflow DAG**
+- Close versions for businesses that **disappear from a snapshot**
+- Build **fact tables** that join on `business_sk` for point-in-time analytics
