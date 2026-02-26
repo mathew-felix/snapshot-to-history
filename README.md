@@ -10,6 +10,8 @@
 
 > NYC publishes only a daily "current state" snapshot of ~70K business licenses with no history — every overwrite destroys the past. This pipeline ingests full snapshots into PostgreSQL and uses dbt to maintain a versioned history of every business record, so questions like *"What was this business's address on March 1st?"* become answerable.
 
+![Before vs After SCD2](docs/before_after_scd2.png)
+
 ---
 
 ## Quickstart
@@ -38,6 +40,8 @@ NYC's [active business license dataset](https://data.cityofnewyork.us/Business/L
 ---
 
 ## How It Works
+
+![Pipeline Architecture](docs/pipeline_architecture.png)
 
 ```
 NYC Open Data API
