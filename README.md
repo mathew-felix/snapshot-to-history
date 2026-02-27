@@ -35,7 +35,7 @@ NYC's [active business license dataset](https://data.cityofnewyork.us/Business/L
 - *"How many businesses changed address last month?"* → no data exists
 - Re-running the same load silently creates duplicate rows
 
-**SCD Type 2** solves this by keeping a version row for every state a record has been in, with `valid_from` / `valid_to` dates and a `is_current` flag.
+**SCD Type 2** solves this by keeping a version row for every state a record has been in, with `valid_from` / `valid_to` dates and an `is_current` flag.
 
 ---
 
