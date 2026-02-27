@@ -57,8 +57,6 @@ marts.businesses_snapshot  (SCD2: valid_from, valid_to, is_current)
 Analytics views: address changes · status history · run quality metrics
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design rationale.
-
 ---
 
 ## Key Engineering Decisions
