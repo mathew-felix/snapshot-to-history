@@ -1,4 +1,5 @@
 import csv
+import argparse
 import os
 import time
 import requests
@@ -67,4 +68,11 @@ def fetch_snapshot(snapshot_date: date = None) -> str:
 
 
 if __name__ == "__main__":
-    fetch_snapshot()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--snapshot-date",
+        help="Logical snapshot date in YYYY-MM-DD format. Defaults to today.",
+    )
+    args = parser.parse_args()
+    snapshot_date = date.fromisoformat(args.snapshot_date) if args.snapshot_date else date.today()
+    fetch_snapshot(snapshot_date)

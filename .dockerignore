@@ -1,0 +1,12 @@
+.git
+.pytest_cache
+__pycache__
+*.pyc
+venv
+.env
+data/raw/*.csv
+dbt/target
+dbt/dbt_packages
+dbt/logs
+docs/run_artifacts
+
