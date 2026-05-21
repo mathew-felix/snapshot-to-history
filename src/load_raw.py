@@ -30,10 +30,14 @@ EXPECTED_COLUMNS = [
 REQUIRED_COLUMNS = {"license_nbr"}
 
 
-def profile_schema(csv_path: str, load_date: date):
+def read_headers(csv_path: str) -> list[str]:
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
-        headers = reader.fieldnames or []
+        return reader.fieldnames or []
+
+
+def build_schema_profile(csv_path: str) -> dict:
+    headers = read_headers(csv_path)
 
     missing_columns = sorted(set(EXPECTED_COLUMNS) - set(headers))
     added_columns = sorted(set(headers) - set(EXPECTED_COLUMNS))
@@ -41,43 +45,55 @@ def profile_schema(csv_path: str, load_date: date):
     if not missing_columns and not added_columns:
         status = "passed"
 
+    return {
+        "headers": headers,
+        "missing_columns": missing_columns,
+        "added_columns": added_columns,
+        "status": status,
+    }
+
+
+def record_schema_profile(cur, csv_path: str, load_date: date, profile: dict):
+    cur.execute(
+        """
+        INSERT INTO staging.schema_drift_events (
+            load_date, source_file_uri, expected_columns,
+            observed_columns, missing_columns, added_columns, status
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            load_date,
+            csv_path,
+            EXPECTED_COLUMNS,
+            profile["headers"],
+            profile["missing_columns"],
+            profile["added_columns"],
+            profile["status"],
+        ),
+    )
+
+
+def profile_schema(csv_path: str, load_date: date):
+    profile = build_schema_profile(csv_path)
+
     conn = get_connection()
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO staging.schema_drift_events (
-                        load_date, source_file_uri, expected_columns,
-                        observed_columns, missing_columns, added_columns, status
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        load_date,
-                        csv_path,
-                        EXPECTED_COLUMNS,
-                        headers,
-                        missing_columns,
-                        added_columns,
-                        status,
-                    ),
-                )
+                record_schema_profile(cur, csv_path, load_date, profile)
     finally:
         conn.close()
 
-    if status == "failed":
-        raise ValueError(f"Required source columns are missing: {missing_columns}")
+    if profile["status"] == "failed":
+        raise ValueError(f"Required source columns are missing: {profile['missing_columns']}")
 
     print(
         "Schema profile "
-        f"{status}: missing={missing_columns or []}, added={added_columns or []}"
+        f"{profile['status']}: missing={profile['missing_columns'] or []}, "
+        f"added={profile['added_columns'] or []}"
     )
-    return {
-        "status": status,
-        "missing_columns": missing_columns,
-        "added_columns": added_columns,
-    }
+    return profile
 
 
 def file_checksum(csv_path: str) -> str:
@@ -91,6 +107,7 @@ def file_checksum(csv_path: str) -> str:
 def load_snapshot(csv_path: str, load_date: date = None):
     load_date = load_date or date.today()
     ingested_at = datetime.now(timezone.utc)
+    profile = build_schema_profile(csv_path)
 
     conn = get_connection()
     try:
@@ -101,18 +118,27 @@ def load_snapshot(csv_path: str, load_date: date = None):
                     (f"business_registry_scd2:{load_date}",),
                 )
 
-                profile_schema(csv_path, load_date)
+                record_schema_profile(cur, csv_path, load_date, profile)
+                if profile["status"] == "failed":
+                    raise ValueError(
+                        f"Required source columns are missing: {profile['missing_columns']}"
+                    )
+
+                cur.execute(
+                    """
+                    CREATE TEMP TABLE businesses_snapshot_stage
+                    (LIKE raw.businesses_snapshot INCLUDING DEFAULTS)
+                    ON COMMIT DROP
+                    """
+                )
+
+                cur.execute(
+                    "DELETE FROM raw.businesses_snapshot_dlq WHERE load_date = %s",
+                    (load_date,),
+                )
 
                 # IDEMPOTENCY: delete this date's data before loading
                 # so re-running the same snapshot never creates duplicates
-                cur.execute(
-                    "DELETE FROM raw.businesses_snapshot WHERE load_date = %s",
-                    (load_date,)
-                )
-                deleted = cur.rowcount
-                if deleted:
-                    print(f"Removed {deleted} existing rows for {load_date} (re-run detected)")
-
                 # Read CSV and insert rows
                 with open(csv_path, "r", encoding="utf-8", newline="") as f:
                     reader = csv.DictReader(f)
@@ -150,7 +176,7 @@ def load_snapshot(csv_path: str, load_date: date = None):
 
                 cur.executemany(
                     """
-                    INSERT INTO raw.businesses_snapshot (
+                    INSERT INTO businesses_snapshot_stage (
                         license_nbr, business_name, business_name2,
                         address_building, address_street, address_city,
                         address_state, address_zip, license_status,
@@ -159,6 +185,28 @@ def load_snapshot(csv_path: str, load_date: date = None):
                     ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """,
                     rows,
+                )
+
+                cur.execute("SELECT count(*) FROM businesses_snapshot_stage")
+                staged_count = cur.fetchone()[0]
+                if staged_count != len(rows):
+                    raise RuntimeError(
+                        f"Staged row count mismatch: expected {len(rows)}, got {staged_count}"
+                    )
+
+                cur.execute(
+                    "DELETE FROM raw.businesses_snapshot WHERE load_date = %s",
+                    (load_date,)
+                )
+                deleted = cur.rowcount
+                if deleted:
+                    print(f"Removed {deleted} existing rows for {load_date} (re-run detected)")
+
+                cur.execute(
+                    """
+                    INSERT INTO raw.businesses_snapshot
+                    SELECT * FROM businesses_snapshot_stage
+                    """
                 )
                 if rejects:
                     cur.executemany(

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 2 - Audit/DLQ/schema drift foundation.
+Phase 3 - Transactional ingestion hardening.
 
 ## Completed
 
@@ -14,14 +14,17 @@ Phase 2 - Audit/DLQ/schema drift foundation.
 - Added `--snapshot-date` support to `src.extract`.
 - Added raw load audit, DLQ, schema drift event, and pipeline metric tables.
 - Added schema profiling and DLQ routing to `src.load_raw`.
+- Reworked raw loading to use a transaction-scoped staging table before replacing the target `load_date`.
+- Added advisory lock protection for the critical section keyed by `business_registry_scd2:<load_date>`.
+- Added tests for DLQ routing and schema drift logging.
+- Verified Docker test suite: `7 passed`.
 
 ## In Progress
 
-- Run targeted checks and commit Airflow plus audit/DLQ foundation.
+- Commit transactional ingestion hardening.
 
 ## Next
 
-- Phase 3: Harden raw loading for idempotency, transactional staging, and schema drift.
 - Phase 4: Add dbt models/tests for observability and late-arrival repair.
 - Phase 5: Add chaos fixtures/tests and verify the pipeline.
 - Phase 6: Refresh diagrams and recruiter-optimized README.

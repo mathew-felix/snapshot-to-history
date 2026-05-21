@@ -61,10 +61,16 @@ def cleanup_test_date(db_conn):
     """Remove test rows before and after each test."""
     with db_conn.cursor() as cur:
         cur.execute("DELETE FROM raw.businesses_snapshot WHERE load_date = %s", (TEST_DATE,))
+        cur.execute("DELETE FROM raw.businesses_snapshot_dlq WHERE load_date = %s", (TEST_DATE,))
+        cur.execute("DELETE FROM staging.schema_drift_events WHERE load_date = %s", (TEST_DATE,))
+        cur.execute("DELETE FROM raw.businesses_snapshot_load_audit WHERE load_date = %s", (TEST_DATE,))
     db_conn.commit()
     yield
     with db_conn.cursor() as cur:
         cur.execute("DELETE FROM raw.businesses_snapshot WHERE load_date = %s", (TEST_DATE,))
+        cur.execute("DELETE FROM raw.businesses_snapshot_dlq WHERE load_date = %s", (TEST_DATE,))
+        cur.execute("DELETE FROM staging.schema_drift_events WHERE load_date = %s", (TEST_DATE,))
+        cur.execute("DELETE FROM raw.businesses_snapshot_load_audit WHERE load_date = %s", (TEST_DATE,))
     db_conn.commit()
 
 
@@ -103,3 +109,74 @@ class TestLoadRawIdempotency:
         assert count == len(SAMPLE_ROWS), (
             f"Idempotency broken: expected {len(SAMPLE_ROWS)}, got {count}"
         )
+
+    def test_missing_license_routes_to_dlq(self, db_conn, tmp_path):
+        """Rows without the natural key are quarantined and not loaded to raw."""
+        rows = SAMPLE_ROWS + [
+            {
+                "license_nbr": "",
+                "business_name": "No Key LLC",
+                "business_name2": "",
+                "address_building": "99",
+                "address_street": "Broken Row",
+                "address_city": "New York",
+                "address_state": "NY",
+                "address_zip": "10003",
+                "license_status": "Active",
+                "license_category": "Retail",
+                "license_creation_date": "2022-01-01T00:00:00",
+            }
+        ]
+        csv_file = tmp_path / "test_with_bad_row.csv"
+        csv_file.write_text(make_csv_content(rows), encoding="utf-8")
+
+        load_snapshot(str(csv_file), TEST_DATE)
+
+        with db_conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM raw.businesses_snapshot WHERE load_date = %s",
+                (TEST_DATE,),
+            )
+            raw_count = cur.fetchone()[0]
+            cur.execute(
+                """
+                SELECT count(*)
+                FROM raw.businesses_snapshot_dlq
+                WHERE load_date = %s
+                  AND reject_reason = 'missing_license_nbr'
+                """,
+                (TEST_DATE,),
+            )
+            dlq_count = cur.fetchone()[0]
+
+        assert raw_count == len(SAMPLE_ROWS)
+        assert dlq_count == 1
+
+    def test_schema_drift_is_logged_for_added_column(self, db_conn, tmp_path):
+        """Unexpected non-critical columns are logged without blocking the load."""
+        rows = [dict(row, inspection_grade="A") for row in SAMPLE_ROWS]
+        csv_file = tmp_path / "test_schema_drift.csv"
+        output = io.StringIO()
+        fieldnames = list(rows[0].keys())
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+        csv_file.write_text(output.getvalue(), encoding="utf-8")
+
+        load_snapshot(str(csv_file), TEST_DATE)
+
+        with db_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, added_columns
+                FROM staging.schema_drift_events
+                WHERE load_date = %s
+                ORDER BY detected_at DESC
+                LIMIT 1
+                """,
+                (TEST_DATE,),
+            )
+            status, added_columns = cur.fetchone()
+
+        assert status == "warning"
+        assert "inspection_grade" in added_columns
