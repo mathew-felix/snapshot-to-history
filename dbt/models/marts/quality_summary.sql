@@ -1,5 +1,5 @@
 -- quality_summary
--- Pipeline run quality metrics — consumed by summary.py for the console report.
+-- Pipeline run quality metrics â€” consumed by summary.py for the console report.
 
 select
     (select max(load_date) from {{ source('raw', 'businesses_snapshot') }})
@@ -7,9 +7,9 @@ select
     (select count(*) from {{ source('raw', 'businesses_snapshot') }}
      where load_date = (select max(load_date) from {{ source('raw', 'businesses_snapshot') }}))
                                                     as raw_rows_ingested,
-    (select count(*) from {{ ref('businesses_snapshot') }})
+    (select count(*) from {{ ref('dim_business') }})
                                                     as total_versions,
-    (select count(*) from {{ ref('businesses_snapshot') }} where dbt_valid_to is null)
+    (select count(*) from {{ ref('dim_business') }} where is_current)
                                                     as current_rows,
-    (select count(distinct license_nbr) from {{ ref('businesses_snapshot') }} where dbt_valid_to is null)
+    (select count(distinct license_nbr) from {{ ref('dim_business') }} where is_current)
                                                     as unique_current_businesses

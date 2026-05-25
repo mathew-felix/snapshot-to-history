@@ -41,8 +41,8 @@ def print_summary():
             # (dbt doesn't write test results to DB; we just report what we know)
             cur.execute("""
                 SELECT count(*)
-                FROM marts.businesses_snapshot
-                WHERE dbt_valid_to IS NULL
+                FROM public_marts.dim_business
+                WHERE is_current
             """)
             current_check = cur.fetchone()[0]
 

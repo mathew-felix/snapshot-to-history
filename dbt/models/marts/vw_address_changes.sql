@@ -7,12 +7,12 @@ with versioned as (
         license_nbr,
         business_name,
         address_full,
-        dbt_valid_from,
+        valid_from,
         lag(address_full) over (
             partition by license_nbr
-            order by dbt_valid_from
+            order by valid_from
         ) as prev_address
-    from {{ ref('businesses_snapshot') }}
+    from {{ ref('dim_business') }}
 )
 
 select
@@ -20,7 +20,7 @@ select
     business_name,
     prev_address    as old_address,
     address_full    as new_address,
-    dbt_valid_from  as changed_on
+    valid_from      as changed_on
 from versioned
 where prev_address is not null
   and address_full != prev_address

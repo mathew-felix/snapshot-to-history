@@ -5,15 +5,15 @@
 
 select
     a.license_nbr,
-    a.dbt_scd_id    as version_a,
-    b.dbt_scd_id    as version_b,
-    a.dbt_valid_from as a_from,
-    a.dbt_valid_to   as a_to,
-    b.dbt_valid_from as b_from,
-    b.dbt_valid_to   as b_to
-from {{ ref('businesses_snapshot') }} a
-join {{ ref('businesses_snapshot') }} b
+    a.business_sk   as version_a,
+    b.business_sk   as version_b,
+    a.valid_from    as a_from,
+    a.valid_to      as a_to,
+    b.valid_from    as b_from,
+    b.valid_to      as b_to
+from {{ ref('dim_business') }} a
+join {{ ref('dim_business') }} b
     on  a.license_nbr  = b.license_nbr
-    and a.dbt_scd_id  != b.dbt_scd_id
-    and a.dbt_valid_from < coalesce(b.dbt_valid_to, '9999-12-31'::timestamp)
-    and coalesce(a.dbt_valid_to, '9999-12-31'::timestamp) > b.dbt_valid_from
+    and a.business_sk != b.business_sk
+    and a.valid_from < coalesce(b.valid_to, '9999-12-31'::date)
+    and coalesce(a.valid_to, '9999-12-31'::date) > b.valid_from

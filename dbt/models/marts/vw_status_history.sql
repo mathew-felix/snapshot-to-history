@@ -5,8 +5,8 @@ select
     license_nbr,
     business_name,
     license_status,
-    dbt_valid_from  as effective_from,
-    dbt_valid_to    as effective_to,
-    (dbt_valid_to is null) as is_current
-from {{ ref('businesses_snapshot') }}
-order by license_nbr, dbt_valid_from
+    valid_from      as effective_from,
+    valid_to        as effective_to,
+    is_current
+from {{ ref('dim_business') }}
+order by license_nbr, valid_from
