@@ -108,6 +108,8 @@ def load_snapshot(csv_path: str, load_date: date = None):
     load_date = load_date or date.today()
     ingested_at = datetime.now(timezone.utc)
     profile = build_schema_profile(csv_path)
+    if profile["status"] == "failed":
+        profile_schema(csv_path, load_date)
 
     conn = get_connection()
     try:

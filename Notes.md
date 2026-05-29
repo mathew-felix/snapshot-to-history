@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 4 - dbt late-arrival repair and reproducible pipeline run.
+Phase 5 - Chaos recovery tests.
 
 ## Completed
 
@@ -24,12 +24,17 @@ Phase 4 - dbt late-arrival repair and reproducible pipeline run.
 - Added a reusable SCD2 repair macro.
 - Added `.gitattributes` and pinned `protobuf<5` to keep dbt 1.7.9 reproducible in Docker.
 - Verified full container pipeline: dbt built 6 models, passed 13 tests, and printed a 2,000-row run summary.
+- Added `tests/test_chaos_recovery.py`.
+- Verified required schema drift fails before raw mutation while preserving a `staging.schema_drift_events` record.
+- Verified late-arriving records rebuild SCD2 windows in chronological order.
+- Verified a simulated post-swap checksum failure rolls back the raw partition to its previous committed state.
+- Verified Docker test suite: `10 passed`.
+- Reran the clean pipeline after chaos tests; dbt passed 13 tests and summary returned to the 2,000-row sample state.
 
 ## In Progress
 
-- Commit dbt late-arrival repair and reproducible pipeline run.
+- Commit chaos recovery tests.
 
 ## Next
 
-- Phase 5: Add chaos fixtures/tests and verify the pipeline.
 - Phase 6: Refresh diagrams and recruiter-optimized README.
