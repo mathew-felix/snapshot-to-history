@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 5 - Chaos recovery tests.
+Phase 6 - Portfolio README and generated diagrams.
 
 ## Completed
 
@@ -30,11 +30,14 @@ Phase 5 - Chaos recovery tests.
 - Verified a simulated post-swap checksum failure rolls back the raw partition to its previous committed state.
 - Verified Docker test suite: `10 passed`.
 - Reran the clean pipeline after chaos tests; dbt passed 13 tests and summary returned to the 2,000-row sample state.
+- Generated refreshed architecture and before/after diagrams and saved them to `docs/`.
+- Rewrote `README.md` as a recruiter-facing project page with badges, visuals, architecture, data quality gates, Airflow DAG details, warehouse map, and interview talking points.
+- Final verification passed: `docker-compose run --rm runner pytest -q tests/` returned `10 passed`; `docker-compose run --rm runner bash run.sh` built dbt successfully, passed 13 dbt tests, and printed the 2,000-row run summary.
 
 ## In Progress
 
-- Commit chaos recovery tests.
+- Commit portfolio assets and finish handoff.
 
 ## Next
 
-- Phase 6: Refresh diagrams and recruiter-optimized README.
+- Final: confirm git status and hand off.
