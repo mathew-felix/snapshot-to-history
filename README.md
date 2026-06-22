@@ -7,11 +7,11 @@
 ![Docker](https://img.shields.io/badge/Docker_Compose-Reproducible-2496ED?logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-23_passing-brightgreen)
 
-**A production-style batch warehouse that turns overwrite-only business-license snapshots into queryable point-in-time history.**
+**A batch warehouse that turns overwrite-only business-license snapshots into queryable point-in-time history.**
 
-NYC Open Data publishes a current-state business license feed. A naive pipeline overwrites yesterday's values and permanently loses prior addresses, statuses, and license attributes. This project loads daily snapshots into PostgreSQL, normalizes dirty source values with dbt Core, builds a repaired SCD Type 2 dimension, and proves the pipeline survives schema drift, late-arriving records, and mid-load failures.
+NYC Open Data publishes a current-state business license feed. A naive pipeline overwrites yesterday's values and permanently loses prior addresses, statuses, and license attributes. This project loads snapshots into PostgreSQL, normalizes dirty source values with dbt Core, builds an SCD Type 2 dimension, and includes recovery paths for schema drift, late-arriving records, and mid-load failures.
 
-![Before vs After SCD2](docs/before_after_scd2.png)
+![Before vs After SCD2](docs/before_after_scd2.svg)
 
 ## Quickstart
 
@@ -37,7 +37,7 @@ Current row check (direct): 2,000
 
 ## Architecture
 
-![Pipeline Architecture](docs/pipeline_architecture.png)
+![Pipeline Architecture](docs/pipeline_architecture.svg)
 
 ```text
 NYC Open Data API
@@ -50,7 +50,7 @@ NYC Open Data API
 
 The Airflow DAG in `dags/business_registry_scd2_daily.py` is configured for daily execution with `catchup=True`, `max_active_runs=1`, retries, exponential backoff, and `{{ ds }}` passed into every extract/load/dbt command. That makes normal daily runs and historical backfills use the same deterministic batch key: `load_date`.
 
-## What Makes This Production-Like
+## Engineering Decisions
 
 **Idempotent partition replacement**
 
@@ -64,13 +64,13 @@ Incoming headers are compared against the expected source contract. Missing requ
 
 The final `public_marts.dim_business` table is rebuilt from all staged snapshots ordered by `load_date`. That avoids trusting dbt snapshot arrival order when a backfill lands after newer data. The model recomputes `valid_from`, `valid_to`, and `is_current` from chronological change points.
 
-**Failures are part of the project**
+**Failure recovery is tested**
 
 The test suite intentionally simulates:
 
 - Required upstream schema drift before raw mutation.
 - Backdated records arriving after newer snapshots.
-- A forced post-swap checksum failure to prove PostgreSQL rollback preserves the previous committed partition.
+- A forced post-swap checksum failure to verify PostgreSQL rollback preserves the previous committed partition.
 
 ## Data Quality Gates
 
@@ -121,7 +121,7 @@ validate_runtime_config
   -> archive_dbt_artifacts
 ```
 
-Airflow is not required for the local `make run` path, but the DAG is ready to deploy in an Airflow environment where this repo is mounted on a worker image with the same Python/dbt dependencies.
+Airflow is not required for the local `make run` path. The DAG is included for scheduled execution in an Airflow environment where this repo is mounted on a worker image with the same Python/dbt dependencies.
 
 ## Repository Map
 
@@ -135,14 +135,13 @@ dbt/models/staging/            Clean typed source models and repair-key detectio
 dbt/models/marts/              SCD2 dimension and analytics marts
 dbt/tests/                     SCD2 invariant tests
 tests/                         Python and chaos recovery tests
-docs/                          Portfolio diagrams and generated assets
-plan.md                        Production blueprint and failure-recovery strategy
+docs/                          Architecture and SCD2 comparison diagrams
+plan.md                        Build blueprint and failure-recovery strategy
 ```
 
-## Interview Talking Points
+## Technical Highlights
 
-- I designed the batch key around Airflow logical date, so retries and backfills mutate the same `load_date` deterministically.
-- I used PostgreSQL transactions and advisory locks to make raw partition replacement safe under task retries and mid-load failures.
-- I did not assume perfect source data: schema drift is logged, unkeyable rows are quarantined, and dbt tests stop invalid history from reaching the marts.
-- I handled late-arriving records by rebuilding effective ranges from ordered staged history instead of trusting arrival order.
-
+- Airflow logical date is the batch key, so retries and backfills mutate the same `load_date` deterministically.
+- PostgreSQL transactions and advisory locks make raw partition replacement safe under task retries and mid-load failures.
+- Schema drift is logged, unkeyable rows are quarantined, and dbt tests stop invalid history from reaching the marts.
+- Late-arriving records are handled by rebuilding effective ranges from ordered staged history instead of trusting arrival order.

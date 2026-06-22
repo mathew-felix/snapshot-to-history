@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" role="img" aria-labelledby="title desc">
+  <title id="title">Before and after SCD Type 2 comparison</title>
+  <desc id="desc">Daily overwrite snapshots lose prior business addresses, while SCD Type 2 preserves point-in-time history.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 16; }
+      .before { fill: #991b1b; }
+      .after { fill: #065f46; }
+      .title { font: 700 34px Arial, sans-serif; }
+      .body { font: 400 16px Arial, sans-serif; fill: #334155; }
+      .head { font: 700 17px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 15px Arial, sans-serif; fill: #334155; }
+      .cell { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; }
+      .header { fill: #0f766e; }
+      .headerText { font: 700 14px Arial, sans-serif; fill: #ffffff; }
+      .cellText { font: 400 14px Arial, sans-serif; fill: #0f172a; }
+      .arrow { stroke: #334155; stroke-width: 3; marker-end: url(#arrow); fill: none; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1280" height="620"/>
+  <line x1="640" y1="42" x2="640" y2="578" stroke="#94a3b8" stroke-width="2"/>
+
+  <text class="title before" x="320" y="72" text-anchor="middle">Before: Daily Snapshot</text>
+  <text class="body" x="320" y="105" text-anchor="middle">Each load overwrites the previous state.</text>
+
+  <g transform="translate(55 145)">
+    <rect class="panel" width="530" height="335"/>
+    <text class="head" x="30" y="42">raw current-state table</text>
+    <text class="body" x="30" y="74">Only the latest address remains after each load.</text>
+
+    <g transform="translate(35 120)">
+      <rect class="cell" width="140" height="40"/><text class="label" x="70" y="25" text-anchor="middle">Day 1</text>
+      <rect class="cell" y="40" width="140" height="95"/><text class="cellText" x="70" y="80" text-anchor="middle">123 Main St</text>
+    </g>
+    <path class="arrow" d="M205 205 H255"/>
+    <text class="before label" x="230" y="190" text-anchor="middle">Overwrite</text>
+    <g transform="translate(275 120)">
+      <rect class="cell" width="140" height="40"/><text class="label" x="70" y="25" text-anchor="middle">Day 2</text>
+      <rect class="cell" y="40" width="140" height="95"/><text class="cellText" x="70" y="80" text-anchor="middle">456 Market St</text>
+    </g>
+    <path class="arrow" d="M445 205 H495"/>
+    <text class="before label" x="470" y="190" text-anchor="middle">Overwrite</text>
+
+    <rect x="35" y="245" width="460" height="62" fill="#fef2f2" stroke="#ef4444" rx="10"/>
+    <text class="head before" x="62" y="282">History Lost</text>
+    <text class="body" x="190" y="282">No reliable answer for prior addresses.</text>
+  </g>
+
+  <text class="title after" x="960" y="72" text-anchor="middle">After: SCD Type 2</text>
+  <text class="body" x="960" y="105" text-anchor="middle">Every changed state gets an effective date range.</text>
+
+  <g transform="translate(700 145)">
+    <rect class="panel" width="530" height="335"/>
+    <text class="head" x="30" y="42">public_marts.dim_business</text>
+    <text class="body" x="30" y="74">Point-in-time queries join to the correct version.</text>
+
+    <g transform="translate(30 115)">
+      <rect class="header" width="110" height="38"/><text class="headerText" x="55" y="24" text-anchor="middle">license_nbr</text>
+      <rect class="header" x="110" width="150" height="38"/><text class="headerText" x="185" y="24" text-anchor="middle">address</text>
+      <rect class="header" x="260" width="100" height="38"/><text class="headerText" x="310" y="24" text-anchor="middle">valid_from</text>
+      <rect class="header" x="360" width="100" height="38"/><text class="headerText" x="410" y="24" text-anchor="middle">valid_to</text>
+      <rect class="header" x="460" width="70" height="38"/><text class="headerText" x="495" y="24" text-anchor="middle">current</text>
+
+      <rect class="cell" y="38" width="110" height="54"/><text class="cellText" x="55" y="70" text-anchor="middle">2069144</text>
+      <rect class="cell" x="110" y="38" width="150" height="54"/><text class="cellText" x="185" y="70" text-anchor="middle">123 Main St</text>
+      <rect class="cell" x="260" y="38" width="100" height="54"/><text class="cellText" x="310" y="70" text-anchor="middle">2024-01-01</text>
+      <rect class="cell" x="360" y="38" width="100" height="54"/><text class="cellText" x="410" y="70" text-anchor="middle">2024-01-02</text>
+      <rect class="cell" x="460" y="38" width="70" height="54"/><text class="cellText" x="495" y="70" text-anchor="middle">false</text>
+
+      <rect class="cell" y="92" width="110" height="54"/><text class="cellText" x="55" y="124" text-anchor="middle">2069144</text>
+      <rect class="cell" x="110" y="92" width="150" height="54"/><text class="cellText" x="185" y="124" text-anchor="middle">456 Market St</text>
+      <rect class="cell" x="260" y="92" width="100" height="54"/><text class="cellText" x="310" y="124" text-anchor="middle">2024-01-02</text>
+      <rect class="cell" x="360" y="92" width="100" height="54"/><text class="cellText" x="410" y="124" text-anchor="middle">2024-01-03</text>
+      <rect class="cell" x="460" y="92" width="70" height="54"/><text class="cellText" x="495" y="124" text-anchor="middle">false</text>
+
+      <rect class="cell" y="146" width="110" height="54"/><text class="cellText" x="55" y="178" text-anchor="middle">2069144</text>
+      <rect class="cell" x="110" y="146" width="150" height="54"/><text class="cellText" x="185" y="178" text-anchor="middle">789 Commerce Dr</text>
+      <rect class="cell" x="260" y="146" width="100" height="54"/><text class="cellText" x="310" y="178" text-anchor="middle">2024-01-03</text>
+      <rect class="cell" x="360" y="146" width="100" height="54"/><text class="cellText" x="410" y="178" text-anchor="middle">NULL</text>
+      <rect class="cell" x="460" y="146" width="70" height="54"/><text class="cellText" x="495" y="178" text-anchor="middle">true</text>
+    </g>
+    <rect x="30" y="250" width="470" height="62" fill="#ecfdf5" stroke="#10b981" rx="10"/>
+    <text class="head after" x="58" y="287">Point-in-Time Queries</text>
+    <text class="body" x="250" y="287">As-of joins return the correct historical row.</text>
+  </g>
+</svg>
+

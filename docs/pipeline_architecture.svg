@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" role="img" aria-labelledby="title desc">
+  <title id="title">Snapshot to History pipeline architecture</title>
+  <desc id="desc">NYC Open Data flows through Airflow, PostgreSQL raw tables, dbt SCD2 models, and analytics marts with DLQ, audit, and tests.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#111827"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 34px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 18px Arial, sans-serif; fill: #475569; }
+      .card { fill: #ffffff; stroke-width: 2; rx: 14; }
+      .head { font: 700 19px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 14px Arial, sans-serif; fill: #334155; }
+      .small { font: 700 13px Arial, sans-serif; fill: #334155; }
+      .arrow { stroke: #111827; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #64748b; stroke-width: 2; stroke-dasharray: 7 7; fill: none; }
+    </style>
+  </defs>
+  <rect class="bg" width="1280" height="620"/>
+  <text class="title" x="640" y="52" text-anchor="middle">Snapshot to History</text>
+  <text class="subtitle" x="640" y="82" text-anchor="middle">Fault-tolerant SCD Type 2 warehouse architecture</text>
+
+  <g transform="translate(40 130)">
+    <rect class="card" width="205" height="230" stroke="#2563eb"/>
+    <text class="head" x="102.5" y="38" text-anchor="middle">NYC Open Data</text>
+    <text class="body" x="26" y="84">Full current-state</text>
+    <text class="body" x="26" y="110">business license</text>
+    <text class="body" x="26" y="136">snapshot feed</text>
+    <text class="small" x="26" y="186">Risk:</text>
+    <text class="body" x="70" y="186">schema drift</text>
+  </g>
+
+  <g transform="translate(285 130)">
+    <rect class="card" width="205" height="230" stroke="#0891b2"/>
+    <text class="head" x="102.5" y="38" text-anchor="middle">Airflow DAG</text>
+    <text class="body" x="26" y="84">Daily schedule</text>
+    <text class="body" x="26" y="110">catchup=True</text>
+    <text class="body" x="26" y="136">max_active_runs=1</text>
+    <text class="body" x="26" y="162">retry backoff</text>
+    <text class="small" x="26" y="204">Batch key: load_date</text>
+  </g>
+
+  <g transform="translate(530 130)">
+    <rect class="card" width="205" height="230" stroke="#d97706"/>
+    <text class="head" x="102.5" y="38" text-anchor="middle">Bronze Raw</text>
+    <text class="body" x="26" y="84">PostgreSQL raw</text>
+    <text class="body" x="26" y="110">transactional staging</text>
+    <text class="body" x="26" y="136">partition replace</text>
+    <text class="body" x="26" y="162">load audit</text>
+    <text class="small" x="26" y="204">DLQ for bad rows</text>
+  </g>
+
+  <g transform="translate(775 130)">
+    <rect class="card" width="205" height="230" stroke="#7c3aed"/>
+    <text class="head" x="102.5" y="38" text-anchor="middle">dbt SCD2</text>
+    <text class="body" x="26" y="84">Normalize text</text>
+    <text class="body" x="26" y="110">compute attr_hash</text>
+    <text class="body" x="26" y="136">rebuild valid ranges</text>
+    <text class="body" x="26" y="162">run invariant tests</text>
+    <text class="small" x="26" y="204">No overlaps, one current</text>
+  </g>
+
+  <g transform="translate(1020 130)">
+    <rect class="card" width="205" height="230" stroke="#16a34a"/>
+    <text class="head" x="102.5" y="38" text-anchor="middle">Gold Marts</text>
+    <text class="body" x="26" y="84">dim_business</text>
+    <text class="body" x="26" y="110">address changes</text>
+    <text class="body" x="26" y="136">status history</text>
+    <text class="body" x="26" y="162">quality summary</text>
+    <text class="small" x="26" y="204">Point-in-time queries</text>
+  </g>
+
+  <path class="arrow" d="M245 245 H277"/>
+  <path class="arrow" d="M490 245 H522"/>
+  <path class="arrow" d="M735 245 H767"/>
+  <path class="arrow" d="M980 245 H1012"/>
+
+  <g transform="translate(230 430)">
+    <rect class="card" width="210" height="90" stroke="#dc2626"/>
+    <text class="head" x="105" y="35" text-anchor="middle">DLQ</text>
+    <text class="body" x="24" y="65">Rejected rows with reason codes</text>
+  </g>
+  <g transform="translate(535 430)">
+    <rect class="card" width="210" height="90" stroke="#2563eb"/>
+    <text class="head" x="105" y="35" text-anchor="middle">Audit</text>
+    <text class="body" x="24" y="65">Row counts, checksums, status</text>
+  </g>
+  <g transform="translate(840 430)">
+    <rect class="card" width="210" height="90" stroke="#059669"/>
+    <text class="head" x="105" y="35" text-anchor="middle">Tests</text>
+    <text class="body" x="24" y="65">dbt and chaos recovery checks</text>
+  </g>
+  <path class="dash" d="M632 360 V430"/>
+  <path class="dash" d="M877 360 V430"/>
+  <path class="dash" d="M350 360 V430"/>
+</svg>
+
