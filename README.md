@@ -9,7 +9,7 @@
 
 **A batch warehouse that turns overwrite-only business-license snapshots into queryable point-in-time history.**
 
-NYC Open Data publishes a current-state business license feed. A naive pipeline overwrites yesterday's values and permanently loses prior addresses, statuses, and license attributes. This project loads snapshots into PostgreSQL, normalizes dirty source values with dbt Core, builds an SCD Type 2 dimension, and includes recovery paths for schema drift, late-arriving records, and mid-load failures.
+NYC Open Data publishes a current-state business license feed. A naive load overwrites yesterday's values and permanently loses prior addresses, statuses, and license attributes. This pipeline uses `load_date` as the batch boundary: raw loads replace one date partition transactionally, dbt computes normalized `attr_hash` values, and `dim_business` rebuilds effective ranges so retries and backfills do not create duplicate current rows.
 
 ![Before vs After SCD2](docs/before_after_scd2.svg)
 
@@ -22,7 +22,7 @@ cp .env.example .env
 make run
 ```
 
-`make run` starts PostgreSQL, loads the committed sample snapshot, runs dbt snapshot/run/test, and prints the warehouse summary.
+`make run` starts PostgreSQL, loads the committed 2,000-row sample snapshot, runs dbt snapshot/run/test, and prints the warehouse summary. The sample is intentionally small so reviewers can run the project locally without depending on the live API.
 
 ```text
 =========== SCD2 BUSINESS REGISTRY - RUN SUMMARY ===========
@@ -48,29 +48,47 @@ NYC Open Data API
   -> analytical marts and invariant tests
 ```
 
-The Airflow DAG in `dags/business_registry_scd2_daily.py` is configured for daily execution with `catchup=True`, `max_active_runs=1`, retries, exponential backoff, and `{{ ds }}` passed into every extract/load/dbt command. That makes normal daily runs and historical backfills use the same deterministic batch key: `load_date`.
+The Airflow DAG in `dags/business_registry_scd2_daily.py` mirrors the local task order for scheduled execution:
 
-## Engineering Decisions
+| Setting | Value | Why it matters |
+|---|---|---|
+| `schedule` | `0 6 * * *` | Daily batch after source refresh window. |
+| `catchup` | `True` | Missed dates can be replayed as historical batches. |
+| `max_active_runs` | `1` | Prevents concurrent SCD2 mutations for different dates. |
+| `retries` | `3` | Allows transient extract/load/dbt failures to retry. |
+| `retry_exponential_backoff` | `True` | Avoids hammering the source or database after repeated failures. |
+| `{{ ds }}` | Passed to extract/load/dbt | Keeps Airflow logical date aligned with warehouse `load_date`. |
 
-**Idempotent partition replacement**
+## Operational Guarantees
 
-The raw loader takes an advisory lock for `business_registry_scd2:<load_date>`, stages rows in a transaction-scoped table, validates staged counts, deletes only the target `load_date`, and swaps the new rows in one transaction. Re-running the same date replaces the same partition instead of appending duplicates.
+| Guarantee | Mechanism | Artifact |
+|---|---|---|
+| Retry for the same date does not duplicate raw rows | Advisory lock plus delete/insert inside one PostgreSQL transaction | `src/load_raw.py` |
+| Bad records do not silently disappear | Missing `license_nbr` rows are written with reason codes | `raw.businesses_snapshot_dlq` |
+| Source schema drift is queryable after failure | Header profile is persisted before required-column failures abort the load | `staging.schema_drift_events` |
+| Backfills do not corrupt current rows | `dim_business` derives ranges from all staged snapshots ordered by `load_date` | `dbt/models/marts/dim_business.sql` |
+| Invalid SCD2 state fails the build | dbt singular tests enforce one current row and no overlaps | `dbt/tests/` |
 
-**Schema drift is observable**
+Raw partition replacement follows this transaction shape:
 
-Incoming headers are compared against the expected source contract. Missing required natural-key fields fail fast and persist a row in `staging.schema_drift_events`. Bad records with missing `license_nbr` are routed to `raw.businesses_snapshot_dlq` with reason codes instead of silently disappearing.
+```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(hashtext('business_registry_scd2:' || :load_date));
+CREATE TEMP TABLE businesses_snapshot_stage (...);
+-- insert rows, route rejects, validate staged count
+DELETE FROM raw.businesses_snapshot WHERE load_date = :load_date;
+INSERT INTO raw.businesses_snapshot SELECT * FROM businesses_snapshot_stage;
+COMMIT;
+```
 
-**Late-arriving records are repaired**
+## Failure Modes Tested
 
-The final `public_marts.dim_business` table is rebuilt from all staged snapshots ordered by `load_date`. That avoids trusting dbt snapshot arrival order when a backfill lands after newer data. The model recomputes `valid_from`, `valid_to`, and `is_current` from chronological change points.
-
-**Failure recovery is tested**
-
-The test suite intentionally simulates:
-
-- Required upstream schema drift before raw mutation.
-- Backdated records arriving after newer snapshots.
-- A forced post-swap checksum failure to verify PostgreSQL rollback preserves the previous committed partition.
+| Incident | Expected failure | Recovery behavior |
+|---|---|---|
+| Required source column is missing | Loader raises before raw mutation | Drift event persists in `staging.schema_drift_events`; raw partition remains unchanged. |
+| Row is missing `license_nbr` | Row cannot be keyed for SCD2 | Record lands in `raw.businesses_snapshot_dlq`; valid rows continue loading. |
+| Older snapshot arrives after a newer snapshot | Snapshot arrival order no longer matches business effective order | `dim_business` rebuilds windows from ordered staged history. |
+| Failure after staging but before commit | Transaction aborts | Previous committed `load_date` partition remains intact. |
 
 ## Data Quality Gates
 
@@ -88,19 +106,15 @@ Core SCD2 invariants:
 - `assert_one_current_per_key`: no `license_nbr` has more than one current row.
 - `assert_no_overlapping_ranges`: no two versions for the same business overlap in effective time.
 
-## Warehouse Tables
+## Warehouse State
 
 | Layer | Object | Purpose |
 |---|---|---|
 | Bronze | `raw.businesses_snapshot` | Full source snapshot rows stored as text plus `load_date` and `ingested_at`. |
-| Bronze | `raw.businesses_snapshot_load_audit` | One audit record per logical load date with row counts and checksum. |
 | Bronze | `raw.businesses_snapshot_dlq` | Rejected records with source row number and reject reason. |
+| Bronze | `raw.businesses_snapshot_load_audit` | One audit record per logical load date with row counts and checksum. |
 | Silver | `public_staging.stg_businesses` | Clean typed rows, normalized tracked attributes, deterministic `attr_hash`. |
-| Silver | `public_staging.scd2_repair_keys` | Operational signal for keys affected by late-arriving history. |
 | Gold | `public_marts.dim_business` | Repaired SCD Type 2 dimension with `valid_from`, `valid_to`, `is_current`. |
-| Gold | `public_marts.vw_address_changes` | Address-change analytics view. |
-| Gold | `public_marts.vw_status_history` | License status history view. |
-| Gold | `public_marts.quality_summary` | Run summary consumed by `src.summary`. |
 
 ## Airflow DAG
 
@@ -121,27 +135,18 @@ validate_runtime_config
   -> archive_dbt_artifacts
 ```
 
-Airflow is not required for the local `make run` path. The DAG is included for scheduled execution in an Airflow environment where this repo is mounted on a worker image with the same Python/dbt dependencies.
+Local verification runs through Docker Compose. The Airflow DAG is authored for deployment in an Airflow worker image with the same Python/dbt dependencies.
 
-## Repository Map
+## Key Files
 
-```text
-dags/                         Airflow DAG
-src/extract.py                 Socrata extract with stable pagination
-src/load_raw.py                Transactional raw loader with DLQ/audit/schema profiling
-src/archive_dbt_artifacts.py   dbt artifact archiver
-sql/init/                      PostgreSQL schemas, raw, DLQ, audit, metrics tables
-dbt/models/staging/            Clean typed source models and repair-key detection
-dbt/models/marts/              SCD2 dimension and analytics marts
-dbt/tests/                     SCD2 invariant tests
-tests/                         Python and chaos recovery tests
-docs/                          Architecture and SCD2 comparison diagrams
-plan.md                        Build blueprint and failure-recovery strategy
-```
+- `src/load_raw.py`: transactional raw partition replacement, schema profiling, DLQ routing.
+- `dbt/models/marts/dim_business.sql`: SCD2 effective dating rebuilt from staged history.
+- `dags/business_registry_scd2_daily.py`: scheduled DAG with logical-date propagation and retry controls.
+- `tests/test_chaos_recovery.py`: schema drift, late-arrival, and rollback tests.
 
-## Technical Highlights
+## Known Limits
 
-- Airflow logical date is the batch key, so retries and backfills mutate the same `load_date` deterministically.
-- PostgreSQL transactions and advisory locks make raw partition replacement safe under task retries and mid-load failures.
-- Schema drift is logged, unkeyable rows are quarantined, and dbt tests stop invalid history from reaching the marts.
-- Late-arriving records are handled by rebuilding effective ranges from ordered staged history instead of trusting arrival order.
+- Local execution uses Docker Compose and PostgreSQL, not managed AWS infrastructure.
+- The Airflow DAG is deployment-ready but not required for `make run`.
+- The committed sample is 2,000 rows; live extraction is supported separately through `src/extract.py`.
+- The repaired SCD2 model rebuilds ranges from staged history. That is correct for this dataset size; a much larger dimension would need partitioned incremental repair.
