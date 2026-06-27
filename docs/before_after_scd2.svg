@@ -59,33 +59,33 @@
     <text class="body" x="30" y="74">Point-in-time queries join to the correct version.</text>
 
     <g transform="translate(30 115)">
-      <rect class="header" width="110" height="38"/><text class="headerText" x="55" y="24" text-anchor="middle">license_nbr</text>
-      <rect class="header" x="110" width="150" height="38"/><text class="headerText" x="185" y="24" text-anchor="middle">address</text>
-      <rect class="header" x="260" width="100" height="38"/><text class="headerText" x="310" y="24" text-anchor="middle">valid_from</text>
-      <rect class="header" x="360" width="100" height="38"/><text class="headerText" x="410" y="24" text-anchor="middle">valid_to</text>
-      <rect class="header" x="460" width="70" height="38"/><text class="headerText" x="495" y="24" text-anchor="middle">current</text>
+      <rect class="header" width="96" height="38"/><text class="headerText" x="48" y="24" text-anchor="middle">license_nbr</text>
+      <rect class="header" x="96" width="134" height="38"/><text class="headerText" x="163" y="24" text-anchor="middle">address</text>
+      <rect class="header" x="230" width="90" height="38"/><text class="headerText" x="275" y="24" text-anchor="middle">valid_from</text>
+      <rect class="header" x="320" width="90" height="38"/><text class="headerText" x="365" y="24" text-anchor="middle">valid_to</text>
+      <rect class="header" x="410" width="60" height="38"/><text class="headerText" x="440" y="24" text-anchor="middle">current</text>
 
-      <rect class="cell" y="38" width="110" height="54"/><text class="cellText" x="55" y="70" text-anchor="middle">2069144</text>
-      <rect class="cell" x="110" y="38" width="150" height="54"/><text class="cellText" x="185" y="70" text-anchor="middle">123 Main St</text>
-      <rect class="cell" x="260" y="38" width="100" height="54"/><text class="cellText" x="310" y="70" text-anchor="middle">2024-01-01</text>
-      <rect class="cell" x="360" y="38" width="100" height="54"/><text class="cellText" x="410" y="70" text-anchor="middle">2024-01-02</text>
-      <rect class="cell" x="460" y="38" width="70" height="54"/><text class="cellText" x="495" y="70" text-anchor="middle">false</text>
+      <rect class="cell" y="38" width="96" height="54"/><text class="cellText" x="48" y="70" text-anchor="middle">2069144</text>
+      <rect class="cell" x="96" y="38" width="134" height="54"/><text class="cellText" x="163" y="70" text-anchor="middle">123 Main St</text>
+      <rect class="cell" x="230" y="38" width="90" height="54"/><text class="cellText" x="275" y="70" text-anchor="middle">2024-01-01</text>
+      <rect class="cell" x="320" y="38" width="90" height="54"/><text class="cellText" x="365" y="70" text-anchor="middle">2024-01-02</text>
+      <rect class="cell" x="410" y="38" width="60" height="54"/><text class="cellText" x="440" y="70" text-anchor="middle">false</text>
 
-      <rect class="cell" y="92" width="110" height="54"/><text class="cellText" x="55" y="124" text-anchor="middle">2069144</text>
-      <rect class="cell" x="110" y="92" width="150" height="54"/><text class="cellText" x="185" y="124" text-anchor="middle">456 Market St</text>
-      <rect class="cell" x="260" y="92" width="100" height="54"/><text class="cellText" x="310" y="124" text-anchor="middle">2024-01-02</text>
-      <rect class="cell" x="360" y="92" width="100" height="54"/><text class="cellText" x="410" y="124" text-anchor="middle">2024-01-03</text>
-      <rect class="cell" x="460" y="92" width="70" height="54"/><text class="cellText" x="495" y="124" text-anchor="middle">false</text>
+      <rect class="cell" y="92" width="96" height="54"/><text class="cellText" x="48" y="124" text-anchor="middle">2069144</text>
+      <rect class="cell" x="96" y="92" width="134" height="54"/><text class="cellText" x="163" y="124" text-anchor="middle">456 Market St</text>
+      <rect class="cell" x="230" y="92" width="90" height="54"/><text class="cellText" x="275" y="124" text-anchor="middle">2024-01-02</text>
+      <rect class="cell" x="320" y="92" width="90" height="54"/><text class="cellText" x="365" y="124" text-anchor="middle">2024-01-03</text>
+      <rect class="cell" x="410" y="92" width="60" height="54"/><text class="cellText" x="440" y="124" text-anchor="middle">false</text>
 
-      <rect class="cell" y="146" width="110" height="54"/><text class="cellText" x="55" y="178" text-anchor="middle">2069144</text>
-      <rect class="cell" x="110" y="146" width="150" height="54"/><text class="cellText" x="185" y="178" text-anchor="middle">789 Commerce Dr</text>
-      <rect class="cell" x="260" y="146" width="100" height="54"/><text class="cellText" x="310" y="178" text-anchor="middle">2024-01-03</text>
-      <rect class="cell" x="360" y="146" width="100" height="54"/><text class="cellText" x="410" y="178" text-anchor="middle">NULL</text>
-      <rect class="cell" x="460" y="146" width="70" height="54"/><text class="cellText" x="495" y="178" text-anchor="middle">true</text>
+      <rect class="cell" y="146" width="96" height="54"/><text class="cellText" x="48" y="178" text-anchor="middle">2069144</text>
+      <rect class="cell" x="96" y="146" width="134" height="54"/><text class="cellText" x="163" y="178" text-anchor="middle">789 Commerce</text>
+      <rect class="cell" x="230" y="146" width="90" height="54"/><text class="cellText" x="275" y="178" text-anchor="middle">2024-01-03</text>
+      <rect class="cell" x="320" y="146" width="90" height="54"/><text class="cellText" x="365" y="178" text-anchor="middle">NULL</text>
+      <rect class="cell" x="410" y="146" width="60" height="54"/><text class="cellText" x="440" y="178" text-anchor="middle">true</text>
     </g>
     <rect x="30" y="250" width="470" height="62" fill="#ecfdf5" stroke="#10b981" rx="10"/>
     <text class="head after" x="58" y="287">Point-in-Time Queries</text>
-    <text class="body" x="250" y="287">As-of joins return the correct historical row.</text>
+    <text class="body" x="265" y="279">As-of joins return the correct</text>
+    <text class="body" x="265" y="302">historical row.</text>
   </g>
 </svg>
-
