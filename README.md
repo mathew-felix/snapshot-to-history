@@ -7,9 +7,9 @@
 ![Docker](https://img.shields.io/badge/Docker_Compose-Reproducible-2496ED?logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-23_passing-brightgreen)
 
-**A batch warehouse that turns overwrite-only business-license snapshots into queryable point-in-time history.**
+**A reproducible batch data warehouse that preserves historical business-license state from overwrite-only public snapshots.**
 
-NYC Open Data publishes a current-state business license feed. A naive load overwrites yesterday's values and permanently loses prior addresses, statuses, and license attributes. This pipeline uses `load_date` as the batch boundary: raw loads replace one date partition transactionally, dbt computes normalized `attr_hash` values, and `dim_business` rebuilds effective ranges so retries and backfills do not create duplicate current rows.
+NYC Open Data publishes a current-state business license feed. A naive load overwrites yesterday's values and permanently loses prior addresses, statuses, and license attributes. This project models those snapshots as SCD Type 2 history using Python, PostgreSQL, dbt Core, Docker Compose, and an authored Airflow DAG design. The implementation includes idempotent raw loads, transactional partition replacement, audit tables, DLQ routing, schema drift detection, dbt transformations, and point-in-time SCD2 effective dating.
 
 ![Before vs After SCD2](docs/before_after_scd2.svg)
 
@@ -22,7 +22,7 @@ cp .env.example .env
 make run
 ```
 
-`make run` starts PostgreSQL, loads the committed 2,000-row sample snapshot, runs dbt snapshot/run/test, and prints the warehouse summary. The sample is intentionally small so reviewers can run the project locally without depending on the live API.
+`make run` starts PostgreSQL, loads the committed 2,000-row sample snapshot, runs dbt snapshot/run/test, and prints the warehouse summary.
 
 ```text
 =========== SCD2 BUSINESS REGISTRY - RUN SUMMARY ===========
@@ -34,6 +34,20 @@ Unique active businesses  : 2,000
 Current row check (direct): 2,000
 =============================================================
 ```
+
+## Local Demo vs Live Scale
+
+`make run` uses a committed 2,000-row sample so reviewers can run the full warehouse locally without API credentials, network dependency, or long runtimes.
+
+The pipeline is designed around a live extraction path from NYC Open Data. The same extract/load/dbt flow can run against larger source snapshots by changing the extraction configuration.
+
+The 2,000-row sample is a reproducibility artifact, not the architectural limit of the pipeline.
+
+| Run Mode | Source | Rows Loaded | Purpose |
+|---|---|---:|---|
+| Local reviewer run | Committed sample snapshot | 2,000 | Fast reproducible demo |
+| Live API run | NYC Open Data API | Pending benchmark | Full source extraction benchmark |
+| Backfill run | Multiple logical dates | Pending benchmark | Historical SCD2 repair validation |
 
 ## Architecture
 
@@ -47,17 +61,6 @@ NYC Open Data API
   -> public_marts.dim_business repaired SCD2 ranges
   -> analytical marts and invariant tests
 ```
-
-The Airflow DAG in `dags/business_registry_scd2_daily.py` mirrors the local task order for scheduled execution:
-
-| Setting | Value | Why it matters |
-|---|---|---|
-| `schedule` | `0 6 * * *` | Daily batch after source refresh window. |
-| `catchup` | `True` | Missed dates can be replayed as historical batches. |
-| `max_active_runs` | `1` | Prevents concurrent SCD2 mutations for different dates. |
-| `retries` | `3` | Allows transient extract/load/dbt failures to retry. |
-| `retry_exponential_backoff` | `True` | Avoids hammering the source or database after repeated failures. |
-| `{{ ds }}` | Passed to extract/load/dbt | Keeps Airflow logical date aligned with warehouse `load_date`. |
 
 ## Operational Guarantees
 
@@ -83,12 +86,23 @@ COMMIT;
 
 ## Failure Modes Tested
 
-| Incident | Expected failure | Recovery behavior |
+| Incident | Failure injected | Expected recovery |
 |---|---|---|
-| Required source column is missing | Loader raises before raw mutation | Drift event persists in `staging.schema_drift_events`; raw partition remains unchanged. |
-| Row is missing `license_nbr` | Row cannot be keyed for SCD2 | Record lands in `raw.businesses_snapshot_dlq`; valid rows continue loading. |
-| Older snapshot arrives after a newer snapshot | Snapshot arrival order no longer matches business effective order | `dim_business` rebuilds windows from ordered staged history. |
-| Failure after staging but before commit | Transaction aborts | Previous committed `load_date` partition remains intact. |
+| Required source column missing | CSV missing required header | Loader fails before raw mutation; schema drift event remains queryable |
+| Unkeyable record | Blank `license_nbr` | Row lands in `raw.businesses_snapshot_dlq`; valid rows continue loading |
+| Late-arriving snapshot | Older `load_date` loaded after a newer date | `dim_business` recomputes non-overlapping SCD2 ranges |
+| Mid-load failure | Exception before transaction commit | Previous committed `load_date` partition remains intact |
+
+## Post-Mortem Evidence
+
+Each simulated failure is expected to leave evidence in a specific place:
+
+| Evidence | Where to look |
+|---|---|
+| Orchestration failure | Airflow task logs or local command output |
+| Bad input row | `raw.businesses_snapshot_dlq` |
+| Source contract issue | `staging.schema_drift_events` |
+| Historical corruption risk | `assert_one_current_per_key` and `assert_no_overlapping_ranges` |
 
 ## Data Quality Gates
 
@@ -106,6 +120,17 @@ Core SCD2 invariants:
 - `assert_one_current_per_key`: no `license_nbr` has more than one current row.
 - `assert_no_overlapping_ranges`: no two versions for the same business overlap in effective time.
 
+## Benchmarks
+
+Benchmarks should be regenerated after each major pipeline change. Pending values are intentionally left blank until measured from actual runs.
+
+| Scenario | Rows | Runtime | Status |
+|---|---:|---:|---|
+| Local sample run | 2,000 | Pending benchmark | Reproducible with `make run` |
+| Live API run | Pending benchmark | Pending benchmark | Run with `make live` |
+| Same-date retry | 2,000 | Pending benchmark | Confirms idempotent partition replacement |
+| Late-arriving snapshot repair | Pending benchmark | Pending benchmark | Confirms SCD2 range rebuild |
+
 ## Warehouse State
 
 | Layer | Object | Purpose |
@@ -117,6 +142,17 @@ Core SCD2 invariants:
 | Gold | `public_marts.dim_business` | Repaired SCD Type 2 dimension with `valid_from`, `valid_to`, `is_current`. |
 
 ## Airflow DAG
+
+The Airflow DAG in `dags/business_registry_scd2_daily.py` is authored for scheduled execution and mirrors the local Docker/dbt task order. The default reviewer path remains `make run`, while the DAG documents how the same pipeline would be scheduled with logical dates, retries, catchup, and serialized SCD2 mutations in an Airflow environment.
+
+| Setting | Value | Purpose |
+|---|---|---|
+| `schedule` | `0 6 * * *` | Daily batch schedule. |
+| `catchup` | `True` | Allows missed logical dates to be backfilled. |
+| `max_active_runs` | `1` | Serializes SCD2 mutations across dates. |
+| `retries` | `3` | Retries transient extract/load/dbt failures. |
+| `retry_exponential_backoff` | `True` | Backs off repeated failures instead of retrying immediately. |
+| `{{ ds }}` | Passed to extract/load/dbt | Aligns Airflow logical date with warehouse `load_date`. |
 
 The DAG task graph is:
 
@@ -135,18 +171,44 @@ validate_runtime_config
   -> archive_dbt_artifacts
 ```
 
-Local verification runs through Docker Compose. The Airflow DAG is authored for deployment in an Airflow worker image with the same Python/dbt dependencies.
+Local Docker Compose execution remains the default reviewer path. The DAG is deployment-ready for an Airflow worker image with the same Python/dbt dependencies, but this README does not claim a production Airflow deployment.
 
-## Key Files
+## Engineering Scope
 
-- `src/load_raw.py`: transactional raw partition replacement, schema profiling, DLQ routing.
-- `dbt/models/marts/dim_business.sql`: SCD2 effective dating rebuilt from staged history.
-- `dags/business_registry_scd2_daily.py`: scheduled DAG with logical-date propagation and retry controls.
-- `tests/test_chaos_recovery.py`: schema drift, late-arrival, and rollback tests.
+| Area | Implementation |
+|---|---|
+| Historical modeling | SCD Type 2 `dim_business` with `valid_from`, `valid_to`, and `is_current` |
+| Retry safety | Advisory lock plus transactional partition replacement by `load_date` |
+| Data quality | pytest and dbt tests for load behavior and SCD2 invariants |
+| Bad data handling | DLQ table for unkeyable records |
+| Schema drift | Header profiling before required-column failures mutate raw state |
+| Orchestration design | Authored Airflow DAG with retries, catchup, logical dates, and serialized SCD2 mutations |
 
-## Known Limits
+## How to Measure Live Scale
 
-- Local execution uses Docker Compose and PostgreSQL, not managed AWS infrastructure.
-- The Airflow DAG is deployment-ready but not required for `make run`.
-- The committed sample is 2,000 rows; live extraction is supported separately through `src/extract.py`.
-- The repaired SCD2 model rebuilds ranges from staged history. That is correct for this dataset size; a much larger dimension would need partitioned incremental repair.
+To replace the benchmark placeholders with real values:
+
+1. Run the live extraction path with `make live`.
+2. Capture raw row count from `raw.businesses_snapshot`.
+3. Capture total versions and current rows from `public_marts.dim_business`.
+4. Record runtime for extract, load, dbt run, and dbt test.
+5. Update the Benchmarks table.
+
+Suggested SQL checks:
+
+```sql
+SELECT COUNT(*) FROM raw.businesses_snapshot;
+SELECT COUNT(*) FROM public_marts.dim_business;
+SELECT COUNT(*) FROM public_marts.dim_business WHERE is_current = true;
+SELECT load_date, row_count, rejected_count
+FROM raw.businesses_snapshot_load_audit
+ORDER BY load_date DESC;
+```
+
+## Known Limits and Next Benchmarks
+
+- Local execution uses Docker Compose and PostgreSQL so reviewers can run the full pipeline without cloud cost.
+- The committed 2,000-row sample is intentionally small for reproducibility; live API extraction is supported separately and should be used for scale benchmarks.
+- The Airflow DAG is authored for scheduled execution but is not required for the default local `make run` path.
+- The current SCD2 repair strategy rebuilds effective ranges from staged history, which is appropriate for this project scale. Larger dimensions would require incremental or partition-aware repair.
+- Next benchmark target: run the live NYC Open Data extract and publish row count, runtime, dbt test duration, and SCD2 version counts.
